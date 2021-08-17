@@ -4,10 +4,10 @@ class Table:
         raise NotImplementedError
 
 class Field:
-    def __init__(self, name, parents = [], children = []):
+    def __init__(self, name):
         self.name = name
-        self._parents = parents
-        self._children = children
+        self._parents = []
+        self._children = []
 
         self._wanted = False
         self._needed = False
@@ -34,13 +34,27 @@ class Field:
 
     @property
     def needed(self):
+        if self.wanted:
+            return True
+
         for d in self.descendents:
             if d.wanted:
                 return True
         return False
 
+    @property
+    def available(self):
+        if self.needed:
+            return True
+
+        raise NotImplementedError
+        for a in self.ancestors:
+            if a.needed:
+                return True
+        return False
+
     def __str__(self):
-        return f"{self.name}. \tWanted? {self.wanted} \tNeeded? {self.needed}"
+        return f"{self.name}:\tWanted? {self.wanted}\tNeeded? {self.needed}"
 
 def add_link(start, end, name = ""):
     start._children.append(end)
@@ -57,7 +71,13 @@ a = Field("A")
 b = Field("B")
 add_link(a, b)
 b.set_wanted()
+
 print(a)
+print([p.name for p in a._parents])
+print([c.name for c in a._children])
+
 print(b)
+print([p.name for p in b._parents])
+print([c.name for c in b._children])
 
 print("done")
