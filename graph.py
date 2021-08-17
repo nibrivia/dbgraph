@@ -44,10 +44,13 @@ class Field:
 
     @property
     def available(self):
+        # this actually needs to be a back-and-forth expanding graph
+        # maybe this is where the linear algebra comes in?
+        raise NotImplementedError
+
         if self.needed:
             return True
 
-        raise NotImplementedError
         for a in self.ancestors:
             if a.needed:
                 return True
