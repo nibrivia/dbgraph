@@ -1,7 +1,23 @@
 
 class Table:
     def __init__(self, name):
-        raise NotImplementedError
+        self.name = name
+        self._keys = []
+        self.fields = []
+
+    def add_key(self, new_key):
+        self._keys.append(new_key)
+
+    def add_field(self, field):
+        self.fields.append(field)
+
+    def add_fields(self, fs):
+        for f in fs:
+            self.add_field(f)
+
+    def __str__(self):
+        return f"Table <{self.name}>: {[k.name for k in self._keys]} -> {', '.join(f.name for f in self.fields)} "
+
 
 class Field:
     def __init__(self, name):
@@ -15,6 +31,13 @@ class Field:
 
     def set_wanted(self):
         self._wanted = True
+
+    def add_child(self, child):
+        self._children.append(child)
+        child._parents.append(self)
+
+    def add_parent(self, parent):
+        parent.add_child(self)
 
     @property
     def descendents(self):
@@ -57,11 +80,7 @@ class Field:
         return False
 
     def __str__(self):
-        return f"{self.name}:\tWanted? {self.wanted}\tNeeded? {self.needed}"
-
-def add_link(start, end, name = ""):
-    start._children.append(end)
-    end._parents.append(start)
+        return f"{self.name}:\n\tParents\t{[p.name for p in self._parents]}\n\tChilds\t{[c.name for c in self._children]}\n\tWanted?\t{self.wanted}\n\tNeeded?\t{self.needed}"
 
 
 def make_graph():
@@ -70,17 +89,19 @@ def make_graph():
 def read_graph():
     raise NotImplementedError
 
-a = Field("A")
-b = Field("B")
-add_link(a, b)
-b.set_wanted()
 
-print(a)
-print([p.name for p in a._parents])
-print([c.name for c in a._children])
+user_table = Table("users")
+user_id = Field("user_id")
+user_name = Field("user_name")
+user_email = Field("user_email")
 
-print(b)
-print([p.name for p in b._parents])
-print([c.name for c in b._children])
+user_table.add_key((user_id))
+user_table.add_fields([user_id, user_name, user_email])
+
+print(user_table)
+print(user_id)
+print(user_name)
+print(user_email)
+
 
 print("done")
