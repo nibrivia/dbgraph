@@ -93,6 +93,10 @@ class Field(Node):
     def set_aggregate_fn(self, fn_name):
         self.aggregate_fn = fn_name
 
+    @property
+    def is_computed(self):
+        return False
+
     def set_wanted(self):
         super().set_wanted()
         self._wanted = True
@@ -136,6 +140,10 @@ class ComputedField(Field):
 
         for n in nodes:
             self.add_parent(n)
+
+    @property
+    def is_computed(self):
+        return True
 
     def set_wanted(self):
         super().set_wanted()

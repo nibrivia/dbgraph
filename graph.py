@@ -126,12 +126,12 @@ class Database:
             seen_keys = set()
             for f in t._keys:
                 seen_keys.add(f.name)
-                csv_string += f"{t.name}, {f.name}, {f.name}, TRUE, FALSE\n"
+                csv_string += f"{t.name}, {f.name}, {f.name}, TRUE, {f.is_computed}\n"
 
             for f in t.fields:
                 if f.name in seen_keys:
                     continue
-                csv_string += f"{t.name}, {f.name}, {f.name}, FALSE, FALSE\n"
+                csv_string += f"{t.name}, {f.name}, {f.name}, FALSE, {f.is_computed}\n"
 
         return csv_string
 
@@ -208,5 +208,5 @@ if __name__ == "__main__":
     db.get_plan_for_fields(["n_viewed"])
 
     print()
-    print(db.to_csv())
+    # print(db.to_csv())
     print("done")
