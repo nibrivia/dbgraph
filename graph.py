@@ -1,100 +1,4 @@
-from fields import *
-
-class Node:
-    def __init__(self, name):
-        self.name = name
-        self._parents = []
-        self._children = []
-
-        self._wanted = False
-        self._needed = False
-        self._available = False
-
-
-
-    def set_wanted(self):
-        # raise NotImplementedError
-        self._wanted = True
-        self.set_needed()
-
-    def set_needed(self):
-        # raise NotImplementedError
-        self._needed = True
-        self.set_available()
-
-    def set_available(self):
-        self._available = True
-
-    def check_available(self):
-        raise NotImplementedError
-
-    def add_child(self, child):
-        self._children.append(child)
-        child._parents.append(self)
-
-    def add_parent(self, parent):
-        parent.add_child(self)
-
-    def rm_child(self, child):
-        self._children.remove(child)
-        child._parents.remove(self)
-
-    def rm_parent(self, parent):
-        parent.rm_child(self)
-
-    @property
-    def descendents(self):
-        for d in self.get_descendents(ignore = set()):
-            yield d
-
-    @property
-    def ancestors(self):
-        for a in self.get_ancestors(ignore = set()):
-            yield a
-
-    def get_descendents(self, ignore = set()):
-        children = []
-        for c in self._children:
-            if c in ignore:
-                continue
-
-            ignore.add(c)
-            children.append(c)
-            children.extend(c.get_descendents(ignore = ignore))
-        return children
-
-    def get_ancestors(self, ignore = set()):
-        ancestors = []
-        for p in self._parents:
-            if p in ignore:
-                continue
-
-            ignore.add(p)
-            ancestors.append(p)
-            ancestors.extend(p.get_ancestors(ignore = ignore))
-        return ancestors
-
-    @property
-    def wanted(self):
-        return self._wanted
-
-    @property
-    def needed(self):
-        return self._needed or self._wanted
-
-
-    @property
-    def available(self):
-        return self._needed or self._wanted or self._available
-
-
-    def __str__(self):
-        return f"{self.name}:\n\tParents\t{[p.name for p in self._parents]}\n\tChilds\t{[c.name for c in self._children]}\n\tWanted?\t{self.wanted}\n\tNeeded?\t{self.needed}\n\tAvail?\t{self.available}"
-
-
-
-
-
+from fields import Node, Field, Union, ComputedField
 
 
 
@@ -153,7 +57,7 @@ class Table(Node):
         if self._available:
             return
 
-        print(f"  {self.name} checking if it's available")
+        #print(f"  {self.name} checking if it's available")
         for k in self._keys:
             if k.available:
                 self.set_available()
@@ -185,8 +89,10 @@ class Database:
 
     def add_computed_node(self, fn_name, field_names):
         fields = [self.get_field(n) for n in field_names]
-        fieldClass = self.fns.get(fn_name, ComputedField)
-        field = fieldClass(fields)
+        if fn_name in self.fns:
+            field = self.fns.get(fn_name)(fields)
+        else:
+            field = ComputedField(fields, fn_name)
 
         for f in fields:
             f.add_child(field)
@@ -214,8 +120,24 @@ class Database:
 
         print(self)
 
+    def to_csv(self):
+        csv_string = "tablename, column, global_name, is_table_key, is_computed\n"
+        for t in self.tables.values():
+            seen_keys = set()
+            for f in t._keys:
+                seen_keys.add(f.name)
+                csv_string += f"{t.name}, {f.name}, {f.name}, TRUE, FALSE\n"
+
+            for f in t.fields:
+                if f.name in seen_keys:
+                    continue
+                csv_string += f"{t.name}, {f.name}, {f.name}, FALSE, FALSE\n"
+
+        return csv_string
+
     def __str__(self):
         db_string = ""
+        seen_fields = set()
         for t in self.tables.values():
             if t.wanted:
                 db_string += "\033[31m"
@@ -226,6 +148,7 @@ class Database:
             db_string += f"[{t.name}]\033[0m\n"
 
             for tf in t.fields:
+                seen_fields.add(tf.name)
                 db_string += "  "
 
                 if tf.wanted:
@@ -245,6 +168,26 @@ class Database:
                 db_string += "\033[0m\n"
 
             db_string += "\n"
+
+        fields = set(f for f in self.fields)
+        fields = fields.difference(seen_fields)
+        db_string += "[computed fields]\n"
+        for f_name in fields:
+            f = self.fields[f_name]
+            db_string += "  "
+
+            if f.wanted:
+                db_string += "\033[31m"
+            elif f.needed:
+                db_string += "\033[33m"
+            elif f.available:
+                db_string += "\033[32m"
+
+            db_string += f"  "
+
+            db_string += f"{f.name} \t"
+
+            db_string += "\033[0m\n"
         return db_string
 
 
@@ -257,6 +200,13 @@ if __name__ == "__main__":
     user_and_lesson = db.add_computed_node("union", ["user_id", "lesson_id"])
     db.add_table("lesson_state", [user_and_lesson, "lesson_state"], [user_and_lesson])
 
-    db.get_plan_for_fields(["course_name", "user_first"])
+    db.add_table("lesson_data", ["lesson_id", "n_viewed", "n_finished"], ["lesson_id"])
+    db.add_computed_node("/", ["n_finished", "n_viewed"])
 
+
+
+    db.get_plan_for_fields(["n_viewed"])
+
+    print()
+    print(db.to_csv())
     print("done")
