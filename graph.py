@@ -11,27 +11,24 @@ class Node:
         self._available = False
 
 
-    def update_status(self):
-        something_changed = False
-        if self._wanted:
-            if not self._needed:
-                self._needed = True
-                something_changed = True
-
-        if self._needed:
-            if not self._available:
-                self._available = True
-                something_changed = True
-
-        return something_changed
 
     def set_wanted(self):
+        # raise NotImplementedError
         self._wanted = True
-        self.update_status()
+        self.set_needed()
 
     def set_needed(self):
+        # raise NotImplementedError
         self._needed = True
-        self.update_status()
+        self.set_available()
+
+    def set_available(self):
+        print(f"    {self.name} -> available")
+        self._available = True
+        #raise NotImplementedError( f"{self.name}")
+
+    def check_available(self):
+        raise NotImplementedError
 
     def add_child(self, child):
         self._children.append(child)
@@ -85,33 +82,13 @@ class Node:
 
     @property
     def needed(self):
-        self.update_status()
-        if self._needed:
-            return True
+        return self._needed or self._wanted
 
-        for d in self.descendents:
-            if d.wanted:
-                return True
-        return False
 
     @property
     def available(self):
-        self.update_status()
-        if self._available:
-            return True
+        return self._needed or self._wanted or self._available
 
-        # this actually needs to be a back-and-forth expanding graph
-        # maybe this is where the linear algebra comes in?
-        # raise NotImplementedError
-
-        if self.needed:
-            return True
-
-        available = False
-        for a in self._parents:
-            if a.needed:
-                return True
-        return False
 
     def __str__(self):
         return f"{self.name}:\n\tParents\t{[p.name for p in self._parents]}\n\tChilds\t{[c.name for c in self._children]}\n\tWanted?\t{self.wanted}\n\tNeeded?\t{self.needed}\n\tAvail?\t{self.available}"
@@ -120,27 +97,98 @@ class Node:
 
 
 class Field(Node):
-    pass
+    def set_wanted(self):
+        print(f"  {self.name} -> wanted")
+        super().set_wanted()
+        self._wanted = True
+
+        if len(self._parents) == 1:
+            self._parents[0].set_needed()
 
 
 
-class ComputedField(Node):
-    def __init__(self, nodes):
-        name = f"(computed {' '.join(n.name for n in nodes)})"
+    def set_needed(self):
+        print(f"  {self.name} -> needed")
+        super().set_needed()
+        self.set_available()
+
+    def set_available(self):
+        if self._available:
+            return
+
+        print(f"  {self.name} -> available")
+        #super().set_available()
+        self._available = True
+
+        for c in self._children:
+            c.check_available()
+
+    def check_available(self):
+        if self._available:
+            return
+
+        print(f"  {self.name} checking if it's available")
+        for p in self._parents:
+            if p.available:
+                self.set_available()
+
+
+
+
+
+
+class ComputedField(Field):
+    def __init__(self, nodes, fn_name = "fn"):
+        name = f"({fn_name} {' '.join(n.name for n in nodes)})"
         super().__init__(name)
+        self._params = nodes
 
         for n in nodes:
             self.add_parent(n)
 
+    def set_needed(self):
+        if self._needed:
+            return
+
+        print(f"  {self.name} -> needed")
+        super().set_needed()
+
+        for p in self._parents:
+            p.set_needed()
+
+    def check_available(self):
+        if self._available:
+            return
+
+        print(f"  {self.name} checking if it's available")
+
+        # Check computation parameters
+        params_available = True
+        for p in self._params:
+            if not p.available:
+                params_available = False
+
+        if params_available:
+            self.set_available()
+
+        # Check other parents
+        for p in self._parents:
+            if p in self._params:
+                continue
+            if p.available:
+                self.set_available()
 
 
-class Union(Field):
+
+
+class Union(ComputedField):
     def __init__(self, nodes):
         name = f"(union {' '.join(n.name for n in nodes)})"
-        super().__init__(name)
+        super().__init__(nodes, "union")
 
         for n in nodes:
             self.add_parent(n)
+
 
 
 
@@ -165,6 +213,47 @@ class Table(Node):
     def add_fields(self, fs):
         for f in fs:
             self.add_field(f)
+
+    def set_needed(self):
+        if self._needed:
+            return
+
+
+        print(f"  {self.name} -> needed")
+        super().set_needed()
+
+        # At least one key is already needed
+        if not any(k.needed for k in self._keys):
+            # Set all our keys to needed
+            # TODO support multiple keys more cleanly
+            for k in self._keys:
+                k.set_needed()
+
+
+        for f in self.fields:
+            f.set_available()
+
+    def set_available(self):
+        if self._available:
+            return
+
+        print(f"  {self.name} -> available")
+        super().set_available()
+
+        for c in self._children:
+            c.check_available()
+
+
+    def check_available(self):
+        if self._available:
+            return
+
+        print(f"  {self.name} checking if it's available")
+        for k in self._keys:
+            if k.available:
+                self.set_available()
+
+
 
     def __str__(self):
         return f"Table <{self.name}>:\t{[k.name for k in self._keys]} -> {', '.join(f.name for f in self.fields)}"
@@ -223,7 +312,14 @@ class Database:
     def __str__(self):
         db_string = ""
         for t in self.tables.values():
-            db_string += f"[{t.name}]\n"
+            if t.wanted:
+                db_string += "\033[31m"
+            elif t.needed:
+                db_string += "\033[33m"
+            elif t.available:
+                db_string += "\033[32m"
+            db_string += f"[{t.name}]\033[0m\n"
+
             for tf in t.fields:
                 db_string += "  "
 
@@ -256,6 +352,6 @@ if __name__ == "__main__":
     user_and_lesson = db.add_computed_node("union", ["user_id", "lesson_id"])
     db.add_table("lesson_state", [user_and_lesson, "lesson_state"], [user_and_lesson])
 
-    db.get_plan_for_fields(["course_name"])
+    db.get_plan_for_fields(["course_name", "user_first"])
 
     print("done")
